@@ -1,0 +1,10 @@
+pref("extensions.zotero-pdf2md.apiToken", "");
+pref("extensions.zotero-pdf2md.modelVersion", "vlm");
+pref("extensions.zotero-pdf2md.language", "ch");
+pref("extensions.zotero-pdf2md.isOcr", false);
+pref("extensions.zotero-pdf2md.enableFormula", true);
+pref("extensions.zotero-pdf2md.enableTable", true);
+pref("extensions.zotero-pdf2md.autoConvert", false);
+pref("extensions.zotero-pdf2md.exportDir", "");
+pref("extensions.zotero-pdf2md.exportPerItem", false);
+pref("extensions.zotero-pdf2md.exportLastType", "");

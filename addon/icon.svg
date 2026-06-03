@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+	<rect width="96" height="96" rx="18" fill="#1a73e8"/>
+	<text x="48" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="bold"
+		fill="#ffffff" text-anchor="middle">MD</text>
+	<path d="M48 58 v18 M38 68 l10 10 10 -10" stroke="#ffffff" stroke-width="7" fill="none"
+		stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

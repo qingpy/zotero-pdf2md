@@ -1,0 +1,19 @@
+{
+	"manifest_version": 2,
+	"name": "PDF to Markdown for Zotero",
+	"version": "1.0.0",
+	"description": "Convert PDFs to Markdown and export attachments",
+	"homepage_url": "https://github.com/qingpy/zotero-pdf2md",
+	"icons": {
+		"48": "icon.svg",
+		"96": "icon.svg"
+	},
+	"applications": {
+		"zotero": {
+			"id": "zotero-pdf2md@qingpy.github.io",
+			"update_url": "https://raw.githubusercontent.com/qingpy/zotero-pdf2md/main/update.json",
+			"strict_min_version": "7.0",
+			"strict_max_version": "10.*"
+		}
+	}
+}

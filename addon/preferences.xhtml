@@ -1,0 +1,46 @@
+<groupbox>
+	<label><html:h2>MinerU</html:h2></label>
+	<hbox align="center">
+		<label value="API token:" control="zotero-pdf2md-token"/>
+		<html:input type="password" id="zotero-pdf2md-token"
+			preference="extensions.zotero-pdf2md.apiToken"
+			style="flex: 1; margin-left: 6px;"/>
+	</hbox>
+	<hbox align="center">
+		<label value="Model:" control="zotero-pdf2md-model"/>
+		<menulist id="zotero-pdf2md-model" native="true"
+			preference="extensions.zotero-pdf2md.modelVersion">
+			<menupopup>
+				<menuitem label="vlm" value="vlm"/>
+				<menuitem label="pipeline" value="pipeline"/>
+			</menupopup>
+		</menulist>
+		<label value="Language:" control="zotero-pdf2md-language" style="margin-left: 12px;"/>
+		<html:input type="text" id="zotero-pdf2md-language"
+			preference="extensions.zotero-pdf2md.language"
+			style="width: 4em;"/>
+	</hbox>
+	<checkbox label="Formula recognition" native="true"
+		preference="extensions.zotero-pdf2md.enableFormula"/>
+	<checkbox label="Table recognition" native="true"
+		preference="extensions.zotero-pdf2md.enableTable"/>
+	<checkbox label="Force OCR" native="true"
+		preference="extensions.zotero-pdf2md.isOcr"/>
+	<checkbox label="Auto-convert new PDF attachments" native="true"
+		preference="extensions.zotero-pdf2md.autoConvert"/>
+	<description>Token: mineru.net/apiManage (expires ~90 days). No token = light mode (≤20 pages, rate-limited). Language: ch = Chinese+English, en = English.</description>
+</groupbox>
+
+<groupbox>
+	<label><html:h2>Attachment Export</html:h2></label>
+	<hbox align="center">
+		<label value="Default folder:" control="zotero-pdf2md-export-dir"/>
+		<html:input type="text" id="zotero-pdf2md-export-dir"
+			preference="extensions.zotero-pdf2md.exportDir"
+			style="flex: 1; margin-left: 6px;"/>
+		<button id="zotero-pdf2md-export-choose" label="Choose…"/>
+	</hbox>
+	<checkbox label="Subfolder per item" native="true"
+		preference="extensions.zotero-pdf2md.exportPerItem"/>
+	<description>Empty folder = ask every time.</description>
+</groupbox>
