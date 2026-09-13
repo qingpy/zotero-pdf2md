@@ -3,8 +3,8 @@
 		"zotero-pdf2md@qingpy.github.io": {
 			"updates": [
 				{
-					"version": "1.0.0",
-					"update_link": "https://github.com/qingpy/zotero-pdf2md/releases/download/v1.0.0/zotero-pdf2md.xpi",
+					"version": "1.0.1",
+					"update_link": "https://github.com/qingpy/zotero-pdf2md/releases/download/v1.0.1/zotero-pdf2md.xpi",
 					"applications": {
 						"zotero": {
 							"strict_min_version": "7.0",
