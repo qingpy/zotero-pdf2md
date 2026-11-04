@@ -24,6 +24,7 @@ ZoteroPDF2MD = {
 	POLL_TIMEOUT: 45 * 60 * 1000, // ms per batch
 	LIGHT_POLL_INTERVAL: 4000, // ms
 	LIGHT_POLL_TIMEOUT: 15 * 60 * 1000, // ms per file
+	UPLOAD_STALL: 90 * 1000, // ms without upload progress before giving up
 
 	init({ id, version, rootURI }) {
 		this.id = id;
@@ -93,12 +94,12 @@ ZoteroPDF2MD = {
 			mi.addEventListener("command", () => {
 				fn().catch((e) => {
 					this.log("Error: " + (e.message || e) + "\n" + (e.stack || ""));
-					window.alert("PDF2MD: " + (e.message || e));
+					window.alert("PDF to Markdown: " + (e.message || e));
 				});
 			});
 			itemmenu.appendChild(mi);
 		};
-		add(this.MENU_IDS[0], "Convert to Markdown (MinerU)",
+		add(this.MENU_IDS[0], "Convert to Markdown",
 			() => this.convertSelectedItems(window));
 		add(this.MENU_IDS[1], "Export Attachments",
 			() => this.exportSelected(window, false));
@@ -303,7 +304,7 @@ ZoteroPDF2MD = {
 	},
 
 	enqueueConvert(items, window, opts) {
-		if (this._busy) this._toast(["PDF2MD: queued"], 2000);
+		if (this._busy) this._toast(["Queued for conversion"], 2000);
 		this._chain = this._chain
 			.then(() => this._runConversion(items, window, opts))
 			.catch((e) => this.log("Run error: " + (e.message || e)));
@@ -324,26 +325,22 @@ ZoteroPDF2MD = {
 		const { jobs, skipped } = await this._collectJobs(items);
 		if (skipped.length) this.log("Skipped:\n  " + skipped.join("\n  "));
 		if (!jobs.length) {
-			if (interactive) this._toast(["PDF2MD: nothing to convert", "see debug log"], 4000);
+			if (interactive) this._toast(["Nothing to convert", "No PDF, or Markdown already exists"], 4000);
 			return;
 		}
 
 		this._busy = true;
+		const progress = (n) => "Converting to Markdown (" + n + "/" + jobs.length + ")";
 		try {
-			this._statusShow("PDF2MD 0/" + jobs.length);
-			for (const job of jobs) {
-				this._statusLine(job.dataId, "• " + this._short(job.pdfName));
-			}
+			this._statusShow(progress(0));
+			for (const job of jobs) this._setLine(job, "Waiting");
 			const notes = [];
-			if (light) notes.push("light API, no token (≤20 pages)");
+			if (light) notes.push("No API token: 20 pages max");
 			if (skipped.length) notes.push(skipped.length + " skipped");
 			if (notes.length) this._statusNote(notes.join(" · "));
 
 			let done = 0;
-			const onFinish = () => {
-				done++;
-				this._statusHeadline("PDF2MD " + done + "/" + jobs.length);
-			};
+			const onFinish = () => this._statusHeadline(progress(++done));
 			if (light) {
 				for (const job of jobs) {
 					if (this._shutdown) break;
@@ -359,10 +356,12 @@ ZoteroPDF2MD = {
 			const ok = jobs.filter((j) => j.saved).length;
 			const failed = jobs.length - ok;
 			this.log(ok + " converted, " + failed + " failed");
-			this._statusHeadline("PDF2MD: " + ok + " done" + (failed ? ", " + failed + " failed" : ""));
+			this._statusHeadline(failed
+				? "Converted " + ok + " of " + jobs.length + " PDFs"
+				: "Converted " + ok + (ok === 1 ? " PDF" : " PDFs"));
 		} catch (e) {
 			this.log("Conversion error: " + (e.message || e) + "\n" + (e.stack || ""));
-			this._statusHeadline("PDF2MD error");
+			this._statusHeadline("Conversion failed");
 			this._statusNote(this._short(String(e.message || e), 60));
 		} finally {
 			this._busy = false;
@@ -468,28 +467,31 @@ ZoteroPDF2MD = {
 		const batchId = data.batch_id;
 		const urls = data.file_urls || [];
 		if (urls.length !== jobs.length) {
-			throw new Error("got " + urls.length + " upload URLs for " + jobs.length + " files");
+			throw new Error("MinerU returned " + urls.length + " upload URLs for " + jobs.length + " files");
 		}
 		this.log("Batch " + batchId + ": " + jobs.length + " file(s)");
 
-		// 2. Upload the PDFs (PUT, no auth / no Content-Type per MinerU docs)
-		for (let i = 0; i < jobs.length; i++) {
+		// 2. Upload the PDFs; a failed upload fails only its own file
+		for (let i = 0; i < jobs.length && !this._shutdown; i++) {
 			const job = jobs[i];
-			this._setLine(job, "uploading");
-			const bytes = await IOUtils.read(job.path);
-			const resp = await this._fetch(urls[i], { method: "PUT", body: bytes });
-			if (!resp.ok) {
-				throw new Error("upload failed (HTTP " + resp.status + ")");
+			this._setLine(job, "Uploading");
+			try {
+				await this._upload(job, urls[i]);
+				this._setLine(job, "Queued");
+			} catch (e) {
+				job.finished = true;
+				job.errMsg = e.message || String(e);
+				this._setLine(job, this._short(job.errMsg, 40), "error");
+				onFinish();
 			}
-			this._setLine(job, "queued");
 		}
 
 		// 3. Poll; save each result as it completes
 		const byDataId = new Map(jobs.map((j) => [j.dataId, j]));
 		const start = Date.now();
-		while (!this._shutdown) {
+		while (!this._shutdown && jobs.some((j) => !j.finished)) {
 			if (Date.now() - start > this.POLL_TIMEOUT) {
-				throw new Error("timed out (batch " + batchId + ")");
+				throw new Error("Timed out waiting for MinerU");
 			}
 			await Zotero.Promise.delay(this.POLL_INTERVAL);
 			let result;
@@ -504,17 +506,17 @@ ZoteroPDF2MD = {
 				if (!job || job.finished) continue;
 				if (r.state === "failed") {
 					job.finished = true;
-					job.errMsg = r.err_msg || "extraction failed";
+					job.errMsg = r.err_msg || "Conversion failed";
 					this._setLine(job, this._short(job.errMsg, 40), "error");
 					this.log(job.pdfName + " failed: " + job.errMsg);
 					onFinish();
 				} else if (r.state === "done") {
 					job.finished = true;
-					this._setLine(job, "saving");
+					this._setLine(job, "Saving");
 					try {
 						await this._saveZipResult(job, r.full_zip_url);
 						job.saved = true;
-						this._setLine(job, "done", "done");
+						this._setLine(job, "Done", "done");
 					} catch (e) {
 						job.errMsg = e.message || String(e);
 						this._setLine(job, this._short(job.errMsg, 40), "error");
@@ -525,16 +527,15 @@ ZoteroPDF2MD = {
 					this._setLine(job, this._stateText(r));
 				}
 			}
-			if (!jobs.some((j) => !j.finished)) break;
 		}
-		if (this._shutdown) throw new Error("shut down during conversion");
+		if (this._shutdown) throw new Error("Plugin stopped during conversion");
 	},
 
 	// --- Agent light API (no token): one file at a time ---
 
 	async _processLight(job) {
 		try {
-			this._setLine(job, "uploading");
+			this._setLine(job, "Uploading");
 			const data = await this._api("POST", this.AGENT_BASE + "/parse/file", {
 				file_name: job.dataId + ".pdf",
 				language: String(this.getPref("language") || "ch").trim() || "ch",
@@ -542,14 +543,13 @@ ZoteroPDF2MD = {
 				enable_formula: !!this.getPref("enableFormula"),
 				enable_table: !!this.getPref("enableTable"),
 			}, null);
-			const bytes = await IOUtils.read(job.path);
-			const up = await this._fetch(data.file_url, { method: "PUT", body: bytes });
-			if (!up.ok) throw new Error("upload failed (HTTP " + up.status + ")");
+			await this._upload(job, data.file_url);
+			this._setLine(job, "Queued");
 
 			const start = Date.now();
 			while (!this._shutdown) {
 				if (Date.now() - start > this.LIGHT_POLL_TIMEOUT) {
-					throw new Error("timed out");
+					throw new Error("Timed out waiting for MinerU");
 				}
 				await Zotero.Promise.delay(this.LIGHT_POLL_INTERVAL);
 				let r;
@@ -560,18 +560,18 @@ ZoteroPDF2MD = {
 					continue;
 				}
 				if (r.state === "done") {
-					this._setLine(job, "saving");
+					this._setLine(job, "Saving");
 					await this._saveLightResult(job, r.markdown_url);
 					job.saved = true;
-					this._setLine(job, "done", "done");
+					this._setLine(job, "Done", "done");
 					return;
 				}
 				if (r.state === "failed") {
-					throw new Error(r.err_msg || "extraction failed");
+					throw new Error(r.err_msg || "Conversion failed");
 				}
-				this._setLine(job, r.state === "running" ? "extracting" : "queued");
+				this._setLine(job, r.state === "running" ? "Extracting" : "Queued");
 			}
-			throw new Error("shut down during conversion");
+			throw new Error("Plugin stopped during conversion");
 		} catch (e) {
 			job.errMsg = e.message || String(e);
 			this._setLine(job, this._short(job.errMsg, 40), "error");
@@ -584,17 +584,15 @@ ZoteroPDF2MD = {
 	_stateText(r) {
 		if (r.state === "running") {
 			const p = r.extract_progress;
-			if (p && p.total_pages) return p.extracted_pages + "/" + p.total_pages + " pages";
-			return "extracting";
+			if (p && p.total_pages) return "Extracting (" + p.extracted_pages + "/" + p.total_pages + " pages)";
+			return "Extracting";
 		}
-		if (r.state === "converting") return "converting";
-		return "queued";
+		if (r.state === "converting") return "Converting";
+		return "Queued";
 	},
 
 	_setLine(job, status, kind) {
-		const sym = kind === "done" ? "✓" : kind === "error" ? "✗" : "→";
-		this._statusLine(job.dataId,
-			sym + " " + this._short(job.pdfName) + " · " + status, kind);
+		this._statusLine(job.dataId, this._short(job.pdfName) + " — " + status, kind);
 	},
 
 	_short(name, max = 32) {
@@ -611,14 +609,14 @@ ZoteroPDF2MD = {
 	},
 
 	async _saveZipResult(job, zipUrl) {
-		if (!zipUrl) throw new Error("no result zip URL");
+		if (!zipUrl) throw new Error("MinerU returned no result");
 		const tmpDir = this._jobTmpDir(job);
 		await IOUtils.makeDirectory(tmpDir, { createAncestors: true, ignoreExisting: true });
 		const zipPath = PathUtils.join(tmpDir, "result.zip");
 		const mdPath = PathUtils.join(tmpDir, job.mdName);
 
 		const resp = await this._fetch(zipUrl, { method: "GET" });
-		if (!resp.ok) throw new Error("result download failed (HTTP " + resp.status + ")");
+		if (!resp.ok) throw new Error("Download failed (HTTP " + resp.status + ")");
 		await IOUtils.write(zipPath, new Uint8Array(await resp.arrayBuffer()));
 
 		// Extract full.md
@@ -635,7 +633,7 @@ ZoteroPDF2MD = {
 					break;
 				}
 			}
-			if (!mdEntry) throw new Error("full.md not in result zip");
+			if (!mdEntry) throw new Error("Result has no Markdown file");
 			zr.extract(mdEntry, Zotero.File.pathToFile(mdPath));
 		} finally {
 			zr.close();
@@ -645,13 +643,13 @@ ZoteroPDF2MD = {
 	},
 
 	async _saveLightResult(job, markdownUrl) {
-		if (!markdownUrl) throw new Error("no markdown URL");
+		if (!markdownUrl) throw new Error("MinerU returned no result");
 		const tmpDir = this._jobTmpDir(job);
 		await IOUtils.makeDirectory(tmpDir, { createAncestors: true, ignoreExisting: true });
 		const mdPath = PathUtils.join(tmpDir, job.mdName);
 
 		const resp = await this._fetch(markdownUrl, { method: "GET" });
-		if (!resp.ok) throw new Error("result download failed (HTTP " + resp.status + ")");
+		if (!resp.ok) throw new Error("Download failed (HTTP " + resp.status + ")");
 		await IOUtils.writeUTF8(mdPath, await resp.text());
 
 		await this._importMarkdown(job, mdPath, tmpDir);
@@ -720,7 +718,7 @@ ZoteroPDF2MD = {
 			}
 		}
 		if (!files.length) {
-			window.alert("No attachment files on disk.");
+			window.alert("The selected items have no attachment files.");
 			return;
 		}
 
@@ -740,19 +738,19 @@ ZoteroPDF2MD = {
 			const list = [];
 			const mapping = []; // "" = all types
 			if (last && byType.has(last)) {
-				list.push(last + " (" + byType.get(last) + ")");
+				list.push(last.toUpperCase() + " (" + byType.get(last) + ")");
 				mapping.push(last);
 			}
-			list.push("All (" + files.length + ")");
+			list.push("All types (" + files.length + ")");
 			mapping.push("");
 			for (const [t, c] of types) {
 				if (t === last) continue;
-				list.push(t + " (" + c + ")");
+				list.push(t.toUpperCase() + " (" + c + ")");
 				mapping.push(t);
 			}
 			const sel = { value: 0 };
 			if (!Services.prompt.select(window, "Export Attachments",
-					"File type:", list, sel)) {
+					"File type to export:", list, sel)) {
 				return;
 			}
 			const pick = mapping[sel.value];
@@ -789,9 +787,9 @@ ZoteroPDF2MD = {
 		}
 
 		const lines = ["Exported " + copied + " file" + (copied === 1 ? "" : "s"), dir];
-		if (missing) lines.push(missing + " not on disk");
+		if (missing) lines.push(missing + " missing on disk");
 		if (errors.length) {
-			lines.push(errors.length + " failed — see debug log");
+			lines.push(errors.length + " could not be copied");
 			this.log("Export errors:\n  " + errors.join("\n  "));
 		}
 		this._toast(lines, 5000);
@@ -805,9 +803,9 @@ ZoteroPDF2MD = {
 		const fp = Components.classes["@mozilla.org/filepicker;1"].createInstance(nsIFilePicker);
 		// fp.init() takes a BrowsingContext on Firefox 120+, a window before
 		if (Zotero.platformMajorVersion >= 120) {
-			fp.init(window.browsingContext, "Choose folder", nsIFilePicker.modeGetFolder);
+			fp.init(window.browsingContext, "Choose Export Folder", nsIFilePicker.modeGetFolder);
 		} else {
-			fp.init(window, "Choose folder", nsIFilePicker.modeGetFolder);
+			fp.init(window, "Choose Export Folder", nsIFilePicker.modeGetFolder);
 		}
 		if (startDir) {
 			try {
@@ -830,7 +828,7 @@ ZoteroPDF2MD = {
 			const cand = PathUtils.join(dir, base + " (" + i + ")" + ext);
 			if (!(await IOUtils.exists(cand))) return cand;
 		}
-		throw new Error("no unique name for " + dest);
+		throw new Error("No free file name for " + dest);
 	},
 
 	_sanitize(name) {
@@ -864,17 +862,76 @@ ZoteroPDF2MD = {
 			json = await resp.json();
 		} catch (e) {}
 		if (!resp.ok) {
-			throw new Error("MinerU HTTP " + resp.status + (json && json.msg ? ": " + json.msg : ""));
+			throw new Error("MinerU error (HTTP " + resp.status + ")" + (json && json.msg ? ": " + json.msg : ""));
 		}
 		if (!json || json.code !== 0) {
-			throw new Error("MinerU error " + (json ? json.code + ": " + json.msg : "(bad response)"));
+			throw new Error(json ? "MinerU error " + json.code + ": " + json.msg : "Invalid response from MinerU");
 		}
 		return json.data;
 	},
 
+	// MinerU's signed upload URLs point at the Shanghai OSS endpoint, which
+	// crawls from outside China. The bucket has transfer acceleration and the
+	// signature does not cover the host, so try the accelerated host first.
+	async _upload(job, url) {
+		const bytes = await IOUtils.read(job.path);
+		const mb = (bytes.length / 1048576).toFixed(1) + " MB";
+		const fast = url.replace(/\.oss-[a-z0-9-]+\.aliyuncs\.com\//, ".oss-accelerate.aliyuncs.com/");
+		const tries = fast === url ? [url] : [fast, url];
+		for (let i = 0; i < tries.length; i++) {
+			const host = tries[i].split("/")[2];
+			const start = Date.now();
+			const secs = () => ((Date.now() - start) / 1000).toFixed(1) + " s";
+			try {
+				await this._put(tries[i], bytes,
+					(pct) => this._setLine(job, "Uploading " + pct + "%"));
+				this.log("Uploaded " + job.pdfName + " (" + mb + ") to " + host + " in " + secs());
+				return;
+			} catch (e) {
+				this.log("Upload of " + job.pdfName + " (" + mb + ") to " + host
+					+ " failed after " + secs() + ": " + (e.message || e));
+				if (i === tries.length - 1) throw e;
+			}
+		}
+	},
+
+	// PUT with no auth / no Content-Type per MinerU docs. XHR (not fetch) for
+	// upload progress, which drives the status line and the stall timeout.
+	_put(url, bytes, onProgress) {
+		const win = Zotero.getMainWindow();
+		if (!win) throw new Error("No Zotero window is open");
+		return new Promise((resolve, reject) => {
+			const xhr = new win.XMLHttpRequest();
+			let timer = null;
+			const arm = () => {
+				win.clearTimeout(timer);
+				timer = win.setTimeout(() => {
+					xhr.abort();
+					reject(new Error("Upload stalled"));
+				}, this.UPLOAD_STALL);
+			};
+			xhr.upload.onprogress = (e) => {
+				arm();
+				if (e.lengthComputable) onProgress(Math.floor(e.loaded * 100 / e.total));
+			};
+			xhr.onload = () => {
+				win.clearTimeout(timer);
+				if (xhr.status >= 200 && xhr.status < 300) resolve();
+				else reject(new Error("Upload failed (HTTP " + xhr.status + ")"));
+			};
+			xhr.onerror = () => {
+				win.clearTimeout(timer);
+				reject(new Error("Network error during upload"));
+			};
+			xhr.open("PUT", url);
+			xhr.send(bytes);
+			arm();
+		});
+	},
+
 	_fetch(url, opts) {
 		const win = Zotero.getMainWindow();
-		if (!win) throw new Error("no Zotero window for network requests");
+		if (!win) throw new Error("No Zotero window is open");
 		return win.fetch(url, opts);
 	},
 };

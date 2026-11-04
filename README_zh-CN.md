@@ -26,12 +26,12 @@
 
 ## 使用
 
-- 右键条目 → **Convert to Markdown (MinerU)**:转换结果 `<PDF 文件名>.md`
+- 右键条目 → **Convert to Markdown**:转换结果 `<PDF 文件名>.md`
   作为子附件保存在条目下。已转换的条目自动跳过;转换期间再次发起会进入队列。
   进度显示在窗口右下角。
 - 右键条目 → **Export Attachments**(默认文件夹)/ **Export Attachments To…**
   (每次选择文件夹):先选择文件类型,再将附件复制到目标位置。
-- 设置项:模型(`vlm`/`pipeline`)、语言、OCR / 公式 / 表格识别、
+- 设置项:模型(VLM 或 Pipeline)、文档语言、公式与表格识别、OCR、
   新增 PDF 自动转换、默认导出文件夹。
 
 ## 限制

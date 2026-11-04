@@ -1,34 +1,35 @@
 <groupbox>
-	<label><html:h2>MinerU</html:h2></label>
+	<label><html:h2>Markdown Conversion</html:h2></label>
 	<hbox align="center">
-		<label value="API token:" control="zotero-pdf2md-token"/>
+		<label value="MinerU API token:" control="zotero-pdf2md-token"/>
 		<html:input type="password" id="zotero-pdf2md-token"
 			preference="extensions.zotero-pdf2md.apiToken"
 			style="flex: 1; margin-left: 6px;"/>
 	</hbox>
+	<description>Get a free token at mineru.net/apiManage. Tokens expire after 90 days. Without a token, each PDF is limited to 10 MB and 20 pages.</description>
 	<hbox align="center">
 		<label value="Model:" control="zotero-pdf2md-model"/>
 		<menulist id="zotero-pdf2md-model" native="true"
 			preference="extensions.zotero-pdf2md.modelVersion">
 			<menupopup>
-				<menuitem label="vlm" value="vlm"/>
-				<menuitem label="pipeline" value="pipeline"/>
+				<menuitem label="VLM" value="vlm"/>
+				<menuitem label="Pipeline" value="pipeline"/>
 			</menupopup>
 		</menulist>
-		<label value="Language:" control="zotero-pdf2md-language" style="margin-left: 12px;"/>
+		<label value="Document language:" control="zotero-pdf2md-language" style="margin-left: 12px;"/>
 		<html:input type="text" id="zotero-pdf2md-language"
 			preference="extensions.zotero-pdf2md.language"
 			style="width: 4em;"/>
 	</hbox>
-	<checkbox label="Formula recognition" native="true"
+	<description>Language codes: ch (Chinese and English), en (English).</description>
+	<checkbox label="Recognize formulas" native="true"
 		preference="extensions.zotero-pdf2md.enableFormula"/>
-	<checkbox label="Table recognition" native="true"
+	<checkbox label="Recognize tables" native="true"
 		preference="extensions.zotero-pdf2md.enableTable"/>
-	<checkbox label="Force OCR" native="true"
+	<checkbox label="Always use OCR" native="true"
 		preference="extensions.zotero-pdf2md.isOcr"/>
-	<checkbox label="Auto-convert new PDF attachments" native="true"
+	<checkbox label="Convert new PDFs automatically" native="true"
 		preference="extensions.zotero-pdf2md.autoConvert"/>
-	<description>Token: mineru.net/apiManage (expires ~90 days). No token = light mode (≤20 pages, rate-limited). Language: ch = Chinese+English, en = English.</description>
 </groupbox>
 
 <groupbox>
@@ -40,7 +41,7 @@
 			style="flex: 1; margin-left: 6px;"/>
 		<button id="zotero-pdf2md-export-choose" label="Choose…"/>
 	</hbox>
-	<checkbox label="Subfolder per item" native="true"
+	<description>Leave empty to choose a folder each time.</description>
+	<checkbox label="Create a subfolder for each item" native="true"
 		preference="extensions.zotero-pdf2md.exportPerItem"/>
-	<description>Empty folder = ask every time.</description>
 </groupbox>

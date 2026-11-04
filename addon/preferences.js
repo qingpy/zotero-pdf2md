@@ -7,9 +7,9 @@ var ZoteroPDF2MD_Preferences = {
 			const nsIFilePicker = Components.interfaces.nsIFilePicker;
 			const fp = Components.classes["@mozilla.org/filepicker;1"].createInstance(nsIFilePicker);
 			if (Zotero.platformMajorVersion >= 120) {
-				fp.init(window.browsingContext, "Choose export folder", nsIFilePicker.modeGetFolder);
+				fp.init(window.browsingContext, "Choose Export Folder", nsIFilePicker.modeGetFolder);
 			} else {
-				fp.init(window, "Choose export folder", nsIFilePicker.modeGetFolder);
+				fp.init(window, "Choose Export Folder", nsIFilePicker.modeGetFolder);
 			}
 			const current = Zotero.Prefs.get("extensions.zotero-pdf2md.exportDir", true);
 			if (current) {

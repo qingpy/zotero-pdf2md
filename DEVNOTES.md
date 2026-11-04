@@ -24,6 +24,16 @@ capturing the `addons.xpi` logger.
 PowerShell's `Compress-Archive` produces zip files that Zotero's zip reader
 (libjar) rejects. `build-xpi.mjs` writes a plain textbook zip instead.
 
+## MinerU uploads
+
+MinerU's signed upload URLs point at `mineru.oss-cn-shanghai.aliyuncs.com`.
+From outside China that endpoint can drop to a few KB/s (measured 8.6 KB/s
+during Beijing evening peak), and a system proxy such as Clash hides
+it by buffering the body and showing 0 B/s. The bucket has OSS transfer
+acceleration, and the V1 signature does not cover the host, so the same URL
+with host `mineru.oss-accelerate.aliyuncs.com` uploads at full speed
+(5 MB in 3 s in the same test).
+
 ## Misc
 
 - Inline `oncommand=` handlers in preference-pane XHTML are blocked by CSP —

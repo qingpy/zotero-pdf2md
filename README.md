@@ -30,15 +30,15 @@ Without a token, conversion falls back to MinerU's light API
 
 ## Usage
 
-- Right-click items → **Convert to Markdown (MinerU)**: attaches
+- Right-click items → **Convert to Markdown**: attaches
   `<pdf name>.md` next to the PDF. Items that already have the `.md` are
   skipped; further requests are queued. Progress is shown in the lower right
   of the window.
 - Right-click items → **Export Attachments** (default folder) /
   **Export Attachments To…** (choose folder): select a file type, and the
   files are copied to the destination.
-- Settings: model (`vlm`/`pipeline`), language, OCR/formula/table
-  recognition, auto-convert for new PDFs, export folder.
+- Settings: model (VLM or Pipeline), document language, formula and table
+  recognition, OCR, automatic conversion of new PDFs, default export folder.
 
 ## Limitations
 
